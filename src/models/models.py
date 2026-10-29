@@ -6,6 +6,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import Lasso, LinearRegression, Ridge
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
+from xgboost import XGBRegressor
 
 
 def build_model(
@@ -22,6 +23,16 @@ def build_model(
             n_estimators=model_config["n_estimators"],
             random_state=random_seed,
             n_jobs=model_config.get("n_jobs", -1),
+            **params,
+        )
+
+    if model_name == "xgboost":
+        return XGBRegressor(
+            n_estimators=model_config["n_estimators"],
+            objective=model_config.get("objective", "reg:squarederror"),
+            n_jobs=model_config.get("n_jobs", -1),
+            random_state=random_seed,
+            tree_method="hist",
             **params,
         )
 

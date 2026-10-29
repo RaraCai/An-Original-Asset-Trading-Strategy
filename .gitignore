@@ -1,2 +1,9 @@
 # Python virtual environments
 .venv/
+
+# Python bytecode and cache
+__pycache__/
+*.pyc
+
+# Generated outputs
+outputs/

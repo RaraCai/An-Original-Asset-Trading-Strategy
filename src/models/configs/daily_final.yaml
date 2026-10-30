@@ -1,0 +1,52 @@
+
+# Final Daily Forecasting Model
+# Selected using 2018-2021 validation data.
+# Independent test period: 2022-2025 (not used for selection).
+
+pipeline: daily
+
+model:
+  name: lasso
+  params:
+    regressor__alpha: 0.000225
+  max_iter: 20000
+
+features:
+  - return_1d
+  - momentum_5d
+  - volatility_20d
+  - volatility_60d
+  - vix
+  - intraday_return
+  - overnight_return
+  - gap_reversal
+  - tlt_return_5d
+  - yield_2y_change_5d
+  - yield_10y_change_5d
+  - yield_10y_change_20d
+  - yield_curve_10y_2y
+  - real_yield_10y_change_5d
+
+training:
+  window: rolling
+  window_years: 5
+  retraining: monthly
+  label_availability_rule: holding_end_date_before_retraining
+
+prediction:
+  signal_interval_trading_days: 1
+  prediction_horizon_trading_days: 1
+  holding_period_trading_days: 1
+  execution: next_trading_day_open
+
+validation:
+  start_year: 2018
+  end_year: 2021
+  selection_metric: pooled_rmse
+  pooled_rmse: 0.0118195533
+  pooled_mae: 0.00780429
+  pooled_r2: 0.026268
+
+test:
+  start_year: 2022
+  end_year: 2025

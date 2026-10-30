@@ -1,11 +1,37 @@
-# Shared candidate search specification for two independent pipelines.
-# Each pipeline selects its own best model, parameters and feature subset.
+# ============================================================
+# DSA5205 Project 2 - Reproducible experiment configuration
+#
+# HOW TO REPRODUCE AN EXPERIMENT
+# 1. Select the feature block and model block for the experiment.
+# 2. Uncomment the two selected blocks; comment out their alternatives.
+# 3. Keep exactly one 'features:' and one 'models:' key in the YAML.
+# 4. Run: python src/models/train.py --pipeline daily
+#
+# EXPERIMENT GUIDE
+# Initial model search: 21-feature pool + five-model initial grid.
+# Daily Lasso refinement (round 1): G5 14-feature set + Model Grid B.
+# Daily Lasso refinement (round 2): G5 14-feature set + Model Grid C.
+# Feature ablation: use the dedicated ablation_daily.py script and
+#   its recorded experiment definitions; do not infer ablation settings
+#   from the feature block selected here.
+# Weekly experiments: start with the initial feature/model blocks;
+#   choose a separate final feature set and tuning grid from Weekly results.
+#
+# The uncommented blocks below reproduce the initial model search.
+# Their uncommented status is NOT a permanent designation.
+# ============================================================
+
 data:
   daily_path: data/processed/spy_labeled_daily.csv
   weekly_path: data/processed/spy_labeled_weekly.csv
   target: target_return
   training_start_year: 2010
 
+# ============================================================
+# FEATURE SET OPTION A: INITIAL MODEL SEARCH (21 FEATURES)
+# Use for the first model search in either pipeline.
+# Comment out Option B before uncommenting this block.
+# ============================================================
 features:
   - return_1d
   - momentum_5d
@@ -29,12 +55,38 @@ features:
   - yield_curve_10y_2y
   - real_yield_10y_change_5d
 
+
+# ============================================================
+# FEATURE SET OPTION B: DAILY G5 (14 FEATURES)
+# Use for Daily Lasso refinement; comment out Option A.
+# ============================================================
+# features:
+#   - return_1d
+#   - momentum_5d
+#   - volatility_20d
+#   - volatility_60d
+#   - vix
+#   - intraday_return
+#   - overnight_return
+#   - gap_reversal
+#   - tlt_return_5d
+#   - yield_2y_change_5d
+#   - yield_10y_change_5d
+#   - yield_10y_change_20d
+#   - yield_curve_10y_2y
+#   - real_yield_10y_change_5d
+
+
+# ============================================================
+# SHARED DATA SPLITS AND ROLLING TRAINING RULES
+# Used across model searches and refinement experiments.
+# ============================================================
 validation:
   start_year: 2018
   end_year: 2021
   selection_metric: rmse
   secondary_metrics: [mae, r2]
-  aggregation: mean_by_year
+  aggregation: pooled
 
 test:
   start_year: 2022
@@ -58,6 +110,11 @@ pipelines:
     prediction_horizon_trading_days: 5
     holding_period_trading_days: 5
 
+# ============================================================
+# MODEL GRID OPTION A: INITIAL SEARCH (5 MODELS, 31 CANDIDATES)
+# Use with Feature Set Option A for the initial model comparison.
+# Comment out Model Grid Options B and C before uncommenting this block.
+# ============================================================
 models:
   ols:
     param_grid: {}
@@ -87,7 +144,32 @@ models:
       min_child_weight: [5, 20]
       reg_lambda: [1, 10]
 
+
+# ============================================================
+# MODEL GRID OPTION B: DAILY LASSO REFINEMENT ROUND 1 (13 CANDIDATES)
+# Use with Feature Set Option B (G5, 14 features).
+# To reproduce round 1, uncomment Option B and comment out A and C.
+# ============================================================
+# models:
+#   lasso:
+#     max_iter: 20000
+#     param_grid:
+#       regressor__alpha: [0.000100, 0.000125, 0.000150, 0.000175, 0.000200, 0.000225, 0.000250, 0.000275, 0.000300, 0.000325, 0.000350, 0.000375, 0.000400]
+
+
+# ============================================================
+# MODEL GRID OPTION C: DAILY LASSO FINAL LOCAL REFINEMENT (11 CANDIDATES)
+# Use with Feature Set Option B (G5, 14 features).
+# To reproduce this experiment, uncomment Option C and comment out
+# Options A and B. This grid refines around alpha = 0.000225.
+# ============================================================
+# models:
+#   lasso:
+#     max_iter: 20000
+#     param_grid:
+#       regressor__alpha: [0.000200, 0.000205, 0.000210, 0.000215, 0.000220, 0.000225, 0.000230, 0.000235, 0.000240, 0.000245, 0.000250]
+
+
 experiment:
   random_seed: 5205
   output_dir: outputs
-  model_dir: fitted_models

@@ -1,0 +1,94 @@
+# Daily research configuration: full 21-feature candidate pool.
+# Used to reproduce the Daily research workflow from Initial Search onward.
+# The selected Daily final model is recorded separately in daily_final.yaml.
+
+default_pipeline: daily
+
+
+data:
+  daily_path: data/processed/spy_labeled_daily.csv
+  weekly_path: data/processed/spy_labeled_weekly.csv
+  target: target_return
+  training_start_year: 2010
+
+validation:
+  start_year: 2018
+  end_year: 2021
+  selection_metric: pooled_rmse
+  secondary_metrics: [pooled_mae, pooled_r2]
+  aggregation: pooled
+
+test:
+  start_year: 2022
+  end_year: 2025
+
+training:
+  window: rolling
+  window_years: 5
+  retraining: monthly
+  label_availability_rule: holding_end_date_before_retraining
+
+
+pipelines:
+  daily:
+    data_key: daily_path
+    features:
+      - return_1d
+      - momentum_5d
+      - momentum_20d
+      - volatility_5d
+      - volatility_20d
+      - volatility_60d
+      - ma_gap_5_20
+      - vix
+      - rsi_14
+      - relative_volume_20d
+      - intraday_return
+      - overnight_return
+      - intraday_momentum_5d
+      - gap_reversal
+      - qqq_spy_relative_5d
+      - tlt_return_5d
+      - yield_2y_change_5d
+      - yield_10y_change_5d
+      - yield_10y_change_20d
+      - yield_curve_10y_2y
+      - real_yield_10y_change_5d
+    signal_interval_trading_days: 1
+    prediction_horizon_trading_days: 1
+    holding_period_trading_days: 1
+    execution: next_trading_day_open
+
+models:
+  ols:
+    param_grid: {}
+  ridge:
+    param_grid:
+      regressor__alpha: [0.01, 0.1, 1.0, 10.0, 100.0, 1000.0]
+  lasso:
+    max_iter: 200000
+    param_grid:
+      regressor__alpha: [0.00001, 0.00005, 0.0001, 0.0002, 0.0005, 0.001, 0.005, 0.01]
+  random_forest:
+    n_estimators: 200
+    n_jobs: -1
+    param_grid:
+      max_depth: [3, 6]
+      min_samples_leaf: [5, 20]
+      max_features: [0.7, 1.0]
+  xgboost:
+    objective: reg:squarederror
+    n_estimators: 300
+    learning_rate: 0.03
+    subsample: 0.8
+    colsample_bytree: 0.8
+    n_jobs: 4
+    param_grid:
+      max_depth: [2, 4]
+      min_child_weight: [5, 20]
+      reg_lambda: [1, 10]
+
+experiment:
+  name: daily_research_initial_search
+  random_seed: 5205
+  output_dir: outputs

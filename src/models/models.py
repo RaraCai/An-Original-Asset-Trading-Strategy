@@ -1,3 +1,4 @@
+"""Central model factory shared by validation, experiments and testing."""
 from __future__ import annotations
 
 from typing import Any
@@ -15,54 +16,53 @@ def build_model(
     random_seed: int,
     params: dict[str, Any] | None = None,
 ) -> Any:
-    """Construct one configured estimator, applying tunable parameters."""
-    params = params or {}
+    """Construct one estimator; scale linear models inside the fitted pipeline."""
+    params = dict(params or {})
 
     if model_name == "random_forest":
         return RandomForestRegressor(
-            n_estimators=model_config["n_estimators"],
+            n_estimators=int(model_config["n_estimators"]),
             random_state=random_seed,
-            n_jobs=model_config.get("n_jobs", -1),
+            n_jobs=int(model_config.get("n_jobs", -1)),
             **params,
         )
 
     if model_name == "xgboost":
         return XGBRegressor(
-            n_estimators=model_config["n_estimators"],
+            n_estimators=int(model_config["n_estimators"]),
             objective=model_config.get("objective", "reg:squarederror"),
-            n_jobs=model_config.get("n_jobs", -1),
+            learning_rate=float(model_config.get("learning_rate", 0.03)),
+            subsample=float(model_config.get("subsample", 0.8)),
+            colsample_bytree=float(model_config.get("colsample_bytree", 0.8)),
+            n_jobs=int(model_config.get("n_jobs", 4)),
             random_state=random_seed,
-            tree_method="hist",
+            tree_method=model_config.get("tree_method", "hist"),
             **params,
         )
 
-    estimators = {
+    constructors = {
         "ols": LinearRegression,
-        "lasso": lambda: Lasso(max_iter=model_config.get("max_iter", 10000)),
         "ridge": Ridge,
+        "lasso": lambda: Lasso(max_iter=int(model_config.get("max_iter", 10000))),
     }
-    if model_name not in estimators:
+    if model_name not in constructors:
         raise ValueError(f"Unknown model: {model_name}")
 
-    return Pipeline(
-        [
-            ("scaler", StandardScaler()),
-            ("regressor", estimators[model_name]()),
-        ]
-    ).set_params(**params)
+    estimator = constructors[model_name]()
+    return Pipeline([
+        ("scaler", StandardScaler()),
+        ("regressor", estimator),
+    ]).set_params(**params)
 
 
-def build_models(
-    config: dict[str, Any],
-    best_params: dict[str, dict[str, Any]],
-) -> dict[str, Any]:
-    """Construct all configured candidate estimators without fitting them."""
-    models = {}
-    for model_name, model_config in config["models"].items():
-        models[model_name] = build_model(
-            model_name,
+def build_models(config: dict, best_params: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Build all configured estimators without fitting them."""
+    return {
+        name: build_model(
+            name,
             model_config,
-            config["experiment"]["random_seed"],
-            best_params[model_name],
+            int(config["experiment"]["random_seed"]),
+            best_params[name],
         )
-    return models
+        for name, model_config in config["models"].items()
+    }

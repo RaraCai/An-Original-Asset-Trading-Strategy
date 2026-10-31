@@ -1,0 +1,108 @@
+# Weekly research configuration: full 35-feature candidate pool.
+# No final Weekly feature subset or final hyperparameter has been selected.
+# All feature selection and parameter tuning must be recorded as experiments.
+
+default_pipeline: weekly
+
+
+data:
+  daily_path: data/processed/spy_labeled_daily.csv
+  weekly_path: data/processed/spy_labeled_weekly.csv
+  target: target_return
+  training_start_year: 2010
+
+validation:
+  start_year: 2018
+  end_year: 2021
+  selection_metric: pooled_rmse
+  secondary_metrics: [pooled_mae, pooled_r2]
+  aggregation: pooled
+
+test:
+  start_year: 2022
+  end_year: 2025
+
+training:
+  window: rolling
+  window_years: 5
+  retraining: monthly
+  label_availability_rule: holding_end_date_before_retraining
+
+
+pipelines:
+  weekly:
+    data_key: weekly_path
+    features:
+      - weekly_mean_return_5d
+      - weekly_positive_days_5d
+      - weekly_max_return_5d
+      - weekly_min_return_5d
+      - weekly_return_std_5d
+      - weekly_downside_std_5d
+      - weekly_max_drawdown_5d
+      - weekly_mean_intraday_return_5d
+      - weekly_mean_overnight_return_5d
+      - weekly_compounded_intraday_5d
+      - weekly_compounded_overnight_5d
+      - weekly_intraday_std_5d
+      - weekly_mean_relative_volume_5d
+      - weekly_volume_trend_5d
+      - weekly_qqq_relative_return_5d
+      - weekly_tlt_return_5d
+      - weekly_gap_reversal_mean_5d
+      - weekly_gap_reversal_std_5d
+      - weekly_gap_reversal_positive_days_5d
+      - weekly_gap_reversal_abs_mean_5d
+      - weekly_yield_2y_change_5d
+      - weekly_yield_10y_change_5d
+      - weekly_real_yield_change_5d
+      - weekly_yield_curve_change_5d
+      - weekly_yield_curve_mean_5d
+      - weekly_log_price_slope_5d
+      - weekly_trend_fit_r2_5d
+      - weekly_upside_std_5d
+      - weekly_range_mean_5d
+      - weekly_volatility_change_5d
+      - weekly_overnight_std_5d
+      - weekly_vix_change_5d
+      - weekly_vix_std_5d
+      - weekly_qqq_return_5d
+      - weekly_tlt_relative_return_5d
+    signal_interval_trading_days: 5
+    prediction_horizon_trading_days: 5
+    holding_period_trading_days: 5
+    execution: next_trading_day_open
+
+models:
+  ols:
+    param_grid: {}
+  ridge:
+    param_grid:
+      regressor__alpha: [0.01, 0.1, 1.0, 10.0, 100.0, 1000.0]
+  lasso:
+    max_iter: 200000
+    param_grid:
+      regressor__alpha: [0.00001, 0.00005, 0.0001, 0.0002, 0.0005, 0.001, 0.005, 0.01]
+  random_forest:
+    n_estimators: 200
+    n_jobs: -1
+    param_grid:
+      max_depth: [3, 6]
+      min_samples_leaf: [5, 20]
+      max_features: [0.7, 1.0]
+  xgboost:
+    objective: reg:squarederror
+    n_estimators: 300
+    learning_rate: 0.03
+    subsample: 0.8
+    colsample_bytree: 0.8
+    n_jobs: 4
+    param_grid:
+      max_depth: [2, 4]
+      min_child_weight: [5, 20]
+      reg_lambda: [1, 10]
+
+experiment:
+  name: weekly_research_initial_search
+  random_seed: 5205
+  output_dir: outputs

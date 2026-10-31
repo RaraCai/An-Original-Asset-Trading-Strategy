@@ -1,0 +1,70 @@
+default_pipeline: weekly
+data:
+  daily_path: data/processed/spy_labeled_daily.csv
+  weekly_path: data/processed/spy_labeled_weekly.csv
+  target: target_return
+  training_start_year: 2010
+pipelines:
+  weekly:
+    data_key: weekly_path
+    features:
+    - weekly_mean_return_5d
+    - weekly_positive_days_5d
+    - weekly_max_return_5d
+    - weekly_min_return_5d
+    - weekly_log_price_slope_5d
+    - weekly_trend_fit_r2_5d
+    - weekly_mean_relative_volume_5d
+    - weekly_volume_trend_5d
+    - weekly_gap_reversal_mean_5d
+    - weekly_gap_reversal_abs_mean_5d
+    - weekly_gap_reversal_std_5d
+    - weekly_yield_curve_change_5d
+    - weekly_vix_change_5d
+    - weekly_vix_std_5d
+    signal_interval_trading_days: 5
+    prediction_horizon_trading_days: 5
+    holding_period_trading_days: 5
+    execution: next_trading_day_open
+validation:
+  start_year: 2018
+  end_year: 2021
+  selection_metric: pooled_rmse
+  secondary_metrics:
+  - pooled_mae
+  - pooled_r2
+  aggregation: pooled
+test:
+  start_year: 2022
+  end_year: 2025
+training:
+  window: rolling
+  window_years: 5
+  retraining: monthly
+  label_availability_rule: holding_end_date_before_retraining
+models:
+  lasso:
+    max_iter: 200000
+    param_grid:
+      regressor__alpha:
+      - 0.0003
+experiment:
+  name: weekly_final_model
+  random_seed: 5205
+  output_dir: outputs
+final_model_record:
+  name: lasso
+  params:
+    regressor__alpha: 0.0003
+  validation_metrics:
+    pooled_rmse: 0.02414623629487556
+    pooled_mae: 0.016772330153002488
+    pooled_r2: 0.08503238053200635
+  validation_period:
+  - 2018
+  - 2021
+  independent_test_period:
+  - 2022
+  - 2025
+  feature_set: R6-D
+  n_features: 14

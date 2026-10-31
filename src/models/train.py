@@ -1,121 +1,169 @@
+"""Training entry point for configured Daily or Weekly rolling validation."""
 from __future__ import annotations
 
 import argparse
 import json
+import shutil
+import time
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
-import numpy as np
 import pandas as pd
 import yaml
 
-from eval import plot_best_model_predictions
-from val import run_validation, aggregate_results
-
-ROOT = Path(__file__).resolve().parents[2]
-CONFIG_PATH = Path(__file__).resolve().with_name("config.yaml")
-
-
-def load_config(path: Path = CONFIG_PATH) -> dict[str, Any]:
-    with path.open(encoding="utf-8") as file:
-        config = yaml.safe_load(file)
-    if not isinstance(config, dict):
-        raise ValueError(f"Expected YAML mapping: {path}")
-    return config
+from src.config import get_pipeline_features, get_output_root, load_config
+from src.models.data import load_data
+from src.models.eval import plot_best_model_predictions
+from src.models.val import aggregate_results, run_validation
 
 
-def get_pipeline_features(config: dict[str, Any], pipeline: str) -> list[str]:
-    """Return pipeline-specific features, falling back to the shared feature list."""
-    return list(config["pipelines"][pipeline].get("features", config["features"]))
+def _duration(seconds: float) -> str:
+    seconds = max(0, int(seconds))
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{hours:d}h {minutes:02d}m" if hours else (
+        f"{minutes:d}m {seconds:02d}s" if minutes else f"{seconds:d}s"
+    )
 
 
-def load_data(config: dict[str, Any], pipeline: str) -> pd.DataFrame:
-    if pipeline not in config["pipelines"]:
-        raise ValueError(f"Unknown pipeline {pipeline!r}; choose from {list(config['pipelines'])}.")
-    data_key = config["pipelines"][pipeline]["data_key"]
-    data_path = ROOT / config["data"][data_key]
-    if not data_path.is_file():
-        raise FileNotFoundError(f"Processed labeled data not found: {data_path}")
-
-    date_columns = ["decision_date", "execution_date", "holding_end_date"]
-    data = pd.read_csv(data_path, parse_dates=date_columns)
-    features = get_pipeline_features(config, pipeline)
-    required = set(date_columns + features + [config["data"]["target"]])
-    missing = sorted(required - set(data.columns))
-    if missing:
-        raise ValueError(f"Dataset missing columns: {missing}")
-    data = data.dropna(subset=list(required)).sort_values("decision_date").reset_index(drop=True)
-    if data["decision_date"].duplicated().any():
-        raise ValueError("decision_date must be unique within a pipeline.")
-    values = data[features + [config["data"]["target"]]].to_numpy(dtype=float)
-    if not np.isfinite(values).all():
-        raise ValueError("Features and target must be finite.")
-    return data
-
-
-def candidate_table(frame: pd.DataFrame, param_names: list[str]) -> pd.DataFrame:
-    expanded = pd.DataFrame([json.loads(value) for value in frame["params"]], index=frame.index)
-    for name in param_names:
-        if name not in expanded:
-            expanded[name] = None
-    metric_columns = ["n_features", "n_valid", "pooled_rmse", "pooled_mae", "pooled_r2"]
-    return pd.concat([
-        expanded[param_names].reset_index(drop=True),
-        frame[metric_columns].reset_index(drop=True),
-    ], axis=1)
-
-
-def create_run_dir(config: dict[str, Any], pipeline: str) -> Path:
-    base = ROOT / config["experiment"]["output_dir"]
-    base.mkdir(parents=True, exist_ok=True)
+def create_run_dir(config: dict, pipeline: str) -> Path:
+    output_root = get_output_root(config)
+    output_root.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    run_dir = base / f"{pipeline}_{stamp}"
+    run_dir = output_root / f"{pipeline}_{stamp}"
     run_dir.mkdir(exist_ok=False)
     return run_dir
 
 
+def save_run_metadata(config: dict, pipeline: str, run_dir: Path) -> None:
+    config_path = Path(config["_meta"]["config_path"])
+    shutil.copy2(config_path, run_dir / "config_snapshot.yaml")
+    metadata = {
+        "pipeline": pipeline,
+        "config_path": str(config_path),
+        "experiment_name": config["experiment"].get("name"),
+        "features": get_pipeline_features(config, pipeline),
+        "n_features": len(get_pipeline_features(config, pipeline)),
+        "validation_period": [
+            int(config["validation"]["start_year"]),
+            int(config["validation"]["end_year"]),
+        ],
+        "training": config["training"],
+    }
+    (run_dir / "experiment_metadata.json").write_text(
+        json.dumps(metadata, indent=2, ensure_ascii=False, default=str),
+        encoding="utf-8",
+    )
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run the configured monthly rolling validation pipeline.")
-    parser.add_argument("--pipeline", choices=["daily", "weekly"], default="daily")
+    parser = argparse.ArgumentParser(
+        description="Monthly rolling-origin validation for Daily or Weekly."
+    )
+    parser.add_argument("--config", required=True, type=Path, help="Experiment YAML path.")
+    parser.add_argument("--pipeline", choices=["daily", "weekly"], default=None)
+    parser.add_argument(
+        "--progress-every-months", type=int, default=1,
+        help="Show monthly progress every N validation months (default: 1).",
+    )
+    parser.add_argument(
+        "--quiet", action="store_true",
+        help="Disable progress messages (not recommended for long searches).",
+    )
     args = parser.parse_args()
 
-    config = load_config()
-    data = load_data(config, args.pipeline)
-    predictions, fit_log, _ = run_validation(data, config, pipeline=args.pipeline)
+    overall_started = time.perf_counter()
+    print("=" * 78, flush=True)
+    print("MODEL TRAINING COMMAND STARTED", flush=True)
+    print(f"Config: {args.config}", flush=True)
+
+    config = load_config(args.config)
+    pipeline = args.pipeline or config["default_pipeline"]
+    if pipeline not in config["pipelines"]:
+        raise ValueError(f"Pipeline {pipeline!r} is not configured in {args.config}.")
+
+    features = get_pipeline_features(config, pipeline)
+    print(
+        f"Pipeline={pipeline} | features={len(features)} | models={len(config['models'])}",
+        flush=True,
+    )
+    print("Loading processed dataset...", flush=True)
+    data = load_data(config, pipeline)
+    print(
+        f"Dataset loaded: {len(data)} complete rows | "
+        f"dropped incomplete rows={data.attrs.get('rows_dropped_for_missing_values', 0)}",
+        flush=True,
+    )
+    print("Starting monthly rolling validation...", flush=True)
+
+    predictions, fit_log, _ = run_validation(
+        data,
+        config,
+        pipeline,
+        progress=not args.quiet,
+        progress_every_months=args.progress_every_months,
+    )
+    print("Aggregating validation metrics...", flush=True)
     summary = aggregate_results(predictions)
-    run_dir = create_run_dir(config, args.pipeline)
+    run_dir = create_run_dir(config, pipeline)
 
     summary.to_csv(run_dir / "all_models_validation.csv", index=False)
     for model_name, model_config in config["models"].items():
-        subset = summary.loc[summary["model"] == model_name].copy()
-        param_names = list(model_config.get("param_grid", {}))
-        candidate_table(subset, param_names).to_csv(
-            run_dir / f"{model_name}_validation.csv", index=False
+        subset = summary.loc[summary["model"].eq(model_name)].copy()
+        parameter_names = list(model_config.get("param_grid", {}))
+        expanded = pd.DataFrame(
+            [json.loads(value) for value in subset["params"]],
+            index=subset.index,
         )
+        for name in parameter_names:
+            if name not in expanded:
+                expanded[name] = None
+        metric_columns = [
+            "n_features", "n_valid", "pooled_rmse", "pooled_mae", "pooled_r2"
+        ]
+        pd.concat([
+            expanded[parameter_names].reset_index(drop=True),
+            subset[metric_columns].reset_index(drop=True),
+        ], axis=1).to_csv(run_dir / f"{model_name}_validation.csv", index=False)
 
-    predictions.to_csv(run_dir / "validation_predictions.csv", index=False, date_format="%Y-%m-%d")
-    fit_log.to_csv(run_dir / "monthly_fit_log.csv", index=False, date_format="%Y-%m-%d")
+    print("Saving predictions, fit log, plots and configuration snapshot...", flush=True)
+    predictions.to_csv(
+        run_dir / "validation_predictions.csv", index=False, date_format="%Y-%m-%d"
+    )
+    fit_log.to_csv(
+        run_dir / "monthly_fit_log.csv", index=False, date_format="%Y-%m-%d"
+    )
     plot_best_model_predictions(
         predictions,
         summary,
         run_dir / "validation_predictions.png",
-        f"{args.pipeline.title()} Pipeline: Best Configuration per Model",
+        f"{pipeline.title()} Pipeline: Best Configuration per Model",
     )
 
-    with (run_dir / "parameters_used.yaml").open("w", encoding="utf-8") as file:
+    with (run_dir / "parameters_used.yaml").open("w", encoding="utf-8") as handle:
         yaml.safe_dump(
-            {name: model_config.get("param_grid", {}) for name, model_config in config["models"].items()},
-            file,
+            {
+                name: model_config.get("param_grid", {})
+                for name, model_config in config["models"].items()
+            },
+            handle,
             sort_keys=False,
             allow_unicode=True,
         )
+    save_run_metadata(config, pipeline, run_dir)
 
-    print(f"Pipeline: {args.pipeline}")
-    print(f"Validation observations per candidate: {summary['n_valid'].nunique()} unique count(s)")
-    print(f"Candidate configurations evaluated: {len(summary)}")
-    print(summary.to_string(index=False))
-    print(f"Files saved to: {run_dir}")
+    elapsed = time.perf_counter() - overall_started
+    print("=" * 78, flush=True)
+    print(
+        f"{pipeline.title()} validation complete | features={len(features)} "
+        f"| observations={predictions['decision_date'].nunique()} "
+        f"| candidates={len(summary)} | monthly fits={len(fit_log)} "
+        f"| elapsed={_duration(elapsed)}",
+        flush=True,
+    )
+    print(summary.to_string(index=False), flush=True)
+    print(f"Results saved: {run_dir}", flush=True)
+    print("=" * 78, flush=True)
 
 
 if __name__ == "__main__":

@@ -1,76 +1,74 @@
+"""Concise quality checks for all raw market and FRED input files."""
+from __future__ import annotations
+
 from pathlib import Path
-import pandas as pd
+
 import numpy as np
+import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[2]
 RAW = ROOT / "data" / "raw"
+PRICE_FILES = ("spy", "vix", "qqq", "tlt")
+FRED_FILES = ("DGS2", "DGS10", "DFII10")
+PRICE_COLUMNS = {"Open", "High", "Low", "Close", "Adj Close", "Volume"}
 
 
-def check_data(name):
-    print(f"\n{'=' * 50}")
-    print(f"CHECKING {name.upper()}")
-    print("=" * 50)
-
+def check_price_file(name: str) -> pd.DataFrame:
     path = RAW / f"{name}_raw.csv"
-    df = pd.read_csv(path, index_col=0, parse_dates=True)
-    df = df.sort_index()
+    if not path.is_file():
+        raise FileNotFoundError(path)
 
-    # 1. Basic information
-    print("\n[1] Basic Information")
-    print("Rows:", len(df))
-    print("Start:", df.index.min())
-    print("End:", df.index.max())
-    print("Columns:", df.columns.tolist())
+    frame = pd.read_csv(path, index_col="Date", parse_dates=True).sort_index()
+    missing = PRICE_COLUMNS - set(frame.columns)
+    if missing:
+        raise ValueError(f"{path.name} missing columns: {sorted(missing)}")
+    if frame.index.has_duplicates:
+        raise ValueError(f"{path.name} contains duplicate dates.")
 
-    # 2. Check duplicate dates
-    print("\n[2] Duplicate Dates")
-    print("Duplicates:", df.index.duplicated().sum())
+    numeric = frame[list(PRICE_COLUMNS)].apply(pd.to_numeric, errors="coerce")
+    values = numeric.to_numpy(dtype=float)
+    if not np.isfinite(values).all():
+        raise ValueError(f"{path.name} contains missing or non-finite OHLCV values.")
+    if (numeric[["Open", "High", "Low", "Close", "Adj Close"]] <= 0).any().any():
+        raise ValueError(f"{path.name} contains non-positive prices.")
+    if (numeric["Volume"] < 0).any():
+        raise ValueError(f"{path.name} contains negative volume.")
 
-    # 3. Check missing values
-    print("\n[3] Missing Values")
-    print(df.isna().sum())
+    invalid_high = numeric["High"] < numeric[["Open", "Close", "Low"]].max(axis=1)
+    invalid_low = numeric["Low"] > numeric[["Open", "Close", "High"]].min(axis=1)
+    if invalid_high.any() or invalid_low.any():
+        raise ValueError(f"{path.name} contains inconsistent OHLC values.")
 
-    # 4. Check invalid prices
-    print("\n[4] Price Validation")
-    for col in ["Open", "High", "Low", "Close"]:
-        if col in df.columns:
-            invalid = (
-                (df[col] <= 0) |
-                (~np.isfinite(df[col]))
-            )
-            print(f"{col} invalid values:", invalid.sum())
-
-    # 5. Check OHLC consistency
-    if all(c in df.columns for c in ["Open", "High", "Low", "Close"]):
-        bad_high = df["High"] < df[["Open", "Close", "Low"]].max(axis=1)
-        bad_low = df["Low"] > df[["Open", "Close", "High"]].min(axis=1)
-
-        print("Invalid High:", bad_high.sum())
-        print("Invalid Low:", bad_low.sum())
-
-    # 6. Check trading volume
-    if "Volume" in df.columns:
-        print("Negative Volume:", (df["Volume"] < 0).sum())
-        print("Zero Volume:", (df["Volume"] == 0).sum())
-
-    return df
+    return frame
 
 
-spy = check_data("spy")
-vix = check_data("vix")
+def check_fred_file(series: str) -> pd.DataFrame:
+    path = RAW / f"{series}.csv"
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    frame = pd.read_csv(path, parse_dates=["date"])
+    if series not in frame.columns:
+        raise ValueError(f"{path.name} must contain date and {series} columns.")
+    frame[series] = pd.to_numeric(frame[series], errors="coerce")
+    frame = frame.dropna(subset=["date", series])
+    if frame["date"].duplicated().any():
+        raise ValueError(f"{path.name} contains duplicate observation dates.")
+    if len(frame) < 1000:
+        raise ValueError(f"{path.name} has too few valid observations.")
+    return frame
 
-# 7. Check date alignment
-print("\n" + "=" * 50)
-print("DATE ALIGNMENT")
-print("=" * 50)
 
-spy_dates = set(spy.index)
-vix_dates = set(vix.index)
+def main() -> None:
+    RAW.mkdir(parents=True, exist_ok=True)
+    prices = {name: check_price_file(name) for name in PRICE_FILES}
+    fred = {series: check_fred_file(series) for series in FRED_FILES}
 
-print("SPY dates:", len(spy_dates))
-print("VIX dates:", len(vix_dates))
-print("Common dates:", len(spy_dates & vix_dates))
-print("SPY only:", len(spy_dates - vix_dates))
-print("VIX only:", len(vix_dates - spy_dates))
+    spy_dates = prices["spy"].index
+    print(
+        f"Raw data checks passed: {len(prices)} price files, "
+        f"{len(fred)} FRED files; SPY rows={len(spy_dates)}."
+    )
 
-print("\nDATA QUALITY CHECK COMPLETED")
+
+if __name__ == "__main__":
+    main()

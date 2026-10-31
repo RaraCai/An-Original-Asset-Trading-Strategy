@@ -37,7 +37,7 @@ def eligible_training_rows(
 
 
 def run_validation(
-    data: pd.DataFrame, config: dict[str, Any]
+    data: pd.DataFrame, config: dict[str, Any], pipeline: str = "daily"
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Monthly rolling-origin validation for every model/parameter combination.
 
@@ -45,7 +45,7 @@ def run_validation(
     not matured before the first decision date in that month; predict all rows
     in that validation month. No model or hyperparameter is selected here.
     """
-    features = config["features"]
+    features = list(config["pipelines"][pipeline].get("features", config["features"]))
     target = config["data"]["target"]
     seed = config["experiment"]["random_seed"]
     training_cfg = config["training"]

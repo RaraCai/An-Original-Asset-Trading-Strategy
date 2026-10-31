@@ -25,6 +25,11 @@ def load_config(path: Path = CONFIG_PATH) -> dict[str, Any]:
     return config
 
 
+def get_pipeline_features(config: dict[str, Any], pipeline: str) -> list[str]:
+    """Return pipeline-specific features, falling back to the shared feature list."""
+    return list(config["pipelines"][pipeline].get("features", config["features"]))
+
+
 def load_data(config: dict[str, Any], pipeline: str) -> pd.DataFrame:
     if pipeline not in config["pipelines"]:
         raise ValueError(f"Unknown pipeline {pipeline!r}; choose from {list(config['pipelines'])}.")
@@ -35,14 +40,15 @@ def load_data(config: dict[str, Any], pipeline: str) -> pd.DataFrame:
 
     date_columns = ["decision_date", "execution_date", "holding_end_date"]
     data = pd.read_csv(data_path, parse_dates=date_columns)
-    required = set(date_columns + config["features"] + [config["data"]["target"]])
+    features = get_pipeline_features(config, pipeline)
+    required = set(date_columns + features + [config["data"]["target"]])
     missing = sorted(required - set(data.columns))
     if missing:
         raise ValueError(f"Dataset missing columns: {missing}")
     data = data.dropna(subset=list(required)).sort_values("decision_date").reset_index(drop=True)
     if data["decision_date"].duplicated().any():
         raise ValueError("decision_date must be unique within a pipeline.")
-    values = data[config["features"] + [config["data"]["target"]]].to_numpy(dtype=float)
+    values = data[features + [config["data"]["target"]]].to_numpy(dtype=float)
     if not np.isfinite(values).all():
         raise ValueError("Features and target must be finite.")
     return data
@@ -76,7 +82,7 @@ def main() -> None:
 
     config = load_config()
     data = load_data(config, args.pipeline)
-    predictions, fit_log, _ = run_validation(data, config)
+    predictions, fit_log, _ = run_validation(data, config, pipeline=args.pipeline)
     summary = aggregate_results(predictions)
     run_dir = create_run_dir(config, args.pipeline)
 

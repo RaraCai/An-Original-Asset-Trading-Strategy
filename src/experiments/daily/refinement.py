@@ -24,7 +24,7 @@ import pandas as pd
 import yaml
 
 from src.config import get_output_root, load_config
-from src.models.data import load_data
+from src.models.dataloader  import load_data
 from src.models.models import build_model
 from src.models.val import calculate_metrics, eligible_training_rows
 

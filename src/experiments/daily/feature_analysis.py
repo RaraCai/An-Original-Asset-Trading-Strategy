@@ -32,7 +32,7 @@ import numpy as np
 import pandas as pd
 
 from src.config import get_pipeline_features, get_output_root, load_config
-from src.models.data import load_data
+from src.models.dataloader  import load_data
 from src.models.models import build_model
 from src.models.val import eligible_training_rows
 

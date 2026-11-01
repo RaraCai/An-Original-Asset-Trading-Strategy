@@ -1,0 +1,86 @@
+pipeline: weekly
+model: lasso
+frozen_model_alpha: 0.0003
+validation_period:
+- 2018
+- 2021
+training_window: rolling_5_years
+retraining: monthly
+selection_metric: validation_sharpe_ratio
+selection_rule: maximum validation Sharpe; tie-break annualized return then max drawdown
+strategies:
+  original_mapping:
+    params:
+      cost_bps: 5.0
+      delta: 0.0
+      k: 0.0025
+    validation_metrics:
+      annualized_return: 0.19906196151840372
+      annualized_volatility: 0.151391171010733
+      sharpe_ratio: 1.276582845199301
+      max_drawdown: -0.1253127082308828
+    candidate_count: 9
+    selection_rule: maximum validation Sharpe; tie-break annualized return then max
+      drawdown
+  strategy_a:
+    params:
+      base_exposure: 0.5
+      cost_bps: 5.0
+      k: 0.0025
+    validation_metrics:
+      annualized_return: 0.22046450280217145
+      annualized_volatility: 0.15503927865689485
+      sharpe_ratio: 1.364713671457345
+      max_drawdown: -0.1458222115334047
+    candidate_count: 9
+    selection_rule: maximum validation Sharpe; tie-break annualized return then max
+      drawdown
+  strategy_b:
+    params:
+      cost_bps: 5.0
+      k: 0.0025
+      lookback: 4
+      target_vol: 0.1
+    validation_metrics:
+      annualized_return: 0.1706899092581149
+      annualized_volatility: 0.12000162158199376
+      sharpe_ratio: 1.3749180666654561
+      max_drawdown: -0.1295263970482089
+    candidate_count: 27
+    selection_rule: maximum validation Sharpe; tie-break annualized return then max
+      drawdown
+  strategy_c:
+    params:
+      base_exposure: 0.75
+      cost_bps: 5.0
+      downside_multiplier: 2.0
+      k: 0.0025
+    validation_metrics:
+      annualized_return: 0.22525676057746735
+      annualized_volatility: 0.15671404139124323
+      sharpe_ratio: 1.3769098939952717
+      max_drawdown: -0.15204500915714492
+    candidate_count: 27
+    selection_rule: maximum validation Sharpe; tie-break annualized return then max
+      drawdown
+  historical_mean_benchmark:
+    mapping: original_mapping
+    params:
+      cost_bps: 5.0
+      delta: 0.0
+      k: 0.005
+    validation_metrics:
+      annualized_return: 0.07605447320482561
+      annualized_volatility: 0.08574353566452331
+      sharpe_ratio: 0.8983448797223796
+      max_drawdown: -0.15225946948168634
+    candidate_count: 9
+position_constraints:
+  min_weight: 0.0
+  max_weight: 1.0
+  long_only: true
+  leverage: false
+  cash_return: 0.0
+transaction_cost_assumption:
+  daily_bps: 0.0
+  weekly_base_case_bps: 5.0

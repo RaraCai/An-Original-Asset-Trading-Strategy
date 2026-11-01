@@ -12,7 +12,7 @@ import pandas as pd
 import yaml
 
 from src.config import get_pipeline_features, get_output_root, load_config
-from src.models.data import load_data
+from src.models.dataloader  import load_data
 from src.models.eval import plot_best_model_predictions
 from src.models.val import aggregate_results, run_validation
 

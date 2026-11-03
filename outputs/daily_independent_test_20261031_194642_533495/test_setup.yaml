@@ -1,0 +1,29 @@
+pipeline: daily
+config_path: D:\Desktop\5205-project2\configs\daily_final.yaml
+model: lasso
+params:
+  regressor__alpha: 0.000225
+features:
+- return_1d
+- momentum_5d
+- volatility_20d
+- volatility_60d
+- vix
+- intraday_return
+- overnight_return
+- gap_reversal
+- tlt_return_5d
+- yield_2y_change_5d
+- yield_10y_change_5d
+- yield_10y_change_20d
+- yield_curve_10y_2y
+- real_yield_10y_change_5d
+test_period:
+- 2022
+- 2025
+training:
+  window: rolling
+  window_years: 5
+  retraining: monthly
+  label_availability_rule: holding_end_date_before_retraining
+retraining_policy: monthly rolling-window; only labels matured before monthly cutoff

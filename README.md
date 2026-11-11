@@ -1,5 +1,6 @@
 # SPY Daily and Weekly Trading Strategy
 
+[📺see short video to summarize this project on **Youtube**](https://youtu.be/JjpH00E46NY?si=mfvpbsYqV3RUmG1k)
 This repository builds and evaluates daily and weekly, long-only SPY timing strategies. It is an academic research/backtesting project, not a live-trading system or investment advice.
 
 > **Start here:** if the supplied processed data are present, install the dependencies and run the validation and independent-test commands below. Each run prints the folder where it saved its results.

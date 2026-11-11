@@ -159,8 +159,8 @@ def plot_pipeline(paths, pipeline, out):
     plot_data["plot_label"] = plot_data["strategy"].map(_clean_strategy_label)
 
     for column, title, ylabel, filename in [
-        ("equity", "Equity Curve", "Growth of $1", f"{pipeline}_test_equity.png"),
-        ("drawdown", "Drawdown", "Drawdown", f"{pipeline}_test_drawdown.png"),
+        ("equity", "Equity Curve", "Growth of $1", f"{pipeline}_test_equity.pdf"),
+        ("drawdown", "Drawdown", "Drawdown", f"{pipeline}_test_drawdown.pdf"),
     ]:
         fig, ax = plt.subplots(figsize=(17.0, 5.8))
 
